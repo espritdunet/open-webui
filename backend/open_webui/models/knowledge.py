@@ -11,7 +11,7 @@ from open_webui.models.files import FileMetadataResponse
 from open_webui.models.users import Users, UserResponse
 
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import BigInteger, Column, String, Text, JSON
 
 from open_webui.utils.access_control import has_access
@@ -22,6 +22,28 @@ log.setLevel(SRC_LOG_LEVELS["MODELS"])
 ####################
 # Knowledge DB Schema
 ####################
+
+
+class KnowledgeMetadata(BaseModel):
+    """Schéma enrichi des métadonnées"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    schema_version: str = "1.0"
+    source: Optional[dict] = Field(
+        default_factory=dict, description="Source information"
+    )
+    content_info: Optional[dict] = Field(
+        default_factory=dict, description="Content statistics and properties"
+    )
+    embedding_info: Optional[dict] = Field(
+        default_factory=dict, description="Embedding configuration"
+    )
+    tags: Optional[list[str]] = Field(default_factory=list)
+    categories: Optional[list[str]] = Field(default_factory=list)
+    custom_fields: Optional[dict] = Field(default_factory=dict)
+    processing_history: Optional[list[dict]] = Field(default_factory=list)
+    last_processed: Optional[int] = None
 
 
 class Knowledge(Base):
@@ -35,6 +57,10 @@ class Knowledge(Base):
 
     data = Column(JSON, nullable=True)
     meta = Column(JSON, nullable=True)
+
+    extended_metadata = Column(
+        JSON, nullable=True, default=lambda: KnowledgeMetadata().model_dump()
+    )
 
     access_control = Column(JSON, nullable=True)  # Controls data access levels.
     # Defines access control rules for this entry.
@@ -62,17 +88,24 @@ class KnowledgeModel(BaseModel):
 
     id: str
     user_id: str
-
     name: str
     description: str
-
     data: Optional[dict] = None
     meta: Optional[dict] = None
-
+    extended_metadata: Optional[KnowledgeMetadata] = None
     access_control: Optional[dict] = None
+    created_at: int
+    updated_at: int
 
-    created_at: int  # timestamp in epoch
-    updated_at: int  # timestamp in epoch
+
+@field_validator("extended_metadata")
+@classmethod
+def validate_extended_metadata(cls, v):
+    if v is None:
+        return KnowledgeMetadata()
+    if isinstance(v, dict):
+        return KnowledgeMetadata(**v)
+    return v
 
 
 ####################
